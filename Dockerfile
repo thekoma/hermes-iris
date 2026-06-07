@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1.7
 # Hermes Agent image with k8s + MCP toolbelt baked on top of upstream.
 
+# Global ARG — must be declared before the first FROM so subsequent FROM
+# directives can substitute it.  See: https://docs.docker.com/reference/dockerfile/#scope
+# renovate: datasource=docker depName=nousresearch/hermes-agent
+ARG HERMES_VERSION=latest
+
 # ---------- Stage 1: Go MCP servers ----------
 FROM golang:1.26-alpine AS gobuilder
 
@@ -23,8 +28,7 @@ RUN git clone --depth 1 --branch ${VAULT_MCP_SERVER_VERSION} \
 RUN ls -altr /go/bin
 
 # ---------- Stage 2: hermes base + extra tools ----------
-# renovate: datasource=docker depName=nousresearch/hermes-agent
-ARG HERMES_VERSION=latest
+# HERMES_VERSION is declared globally above; ${HERMES_VERSION} substitutes here.
 FROM nousresearch/hermes-agent:${HERMES_VERSION}
 
 USER root
