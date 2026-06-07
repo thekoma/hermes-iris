@@ -1,0 +1,98 @@
+name: Build and Release
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["**"]
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+      - "renovate.json"
+      - "LICENSE"
+  schedule:
+    - cron: "0 3 * * *"  # nightly rebuild picks up upstream/digest changes
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # push the calculated git tag
+      packages: write   # push to ghcr.io
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Calculate next tag (YYYY.MM.N)
+        id: calculate_tag
+        run: |
+          set -e
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PREFIX=$(date +'%Y.%m')
+          git fetch --tags
+          LAST_TAG=$(git tag --list "${PREFIX}.*" | sort -V | tail -n 1)
+          if [ -z "$LAST_TAG" ]; then
+            NEW_TAG="${PREFIX}.0"
+          else
+            SUFFIX="${LAST_TAG#${PREFIX}.}"
+            NEW_SUFFIX=$((SUFFIX + 1))
+            NEW_TAG="${PREFIX}.${NEW_SUFFIX}"
+          fi
+          echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/thekoma/hermes-iris
+          tags: |
+            type=raw,value=${{ steps.calculate_tag.outputs.tag }}
+            type=raw,value=latest
+            type=schedule,pattern=latest-nightly
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          # Start with amd64 only (matches openklaw-katerine; arm64 can be
+          # added once we confirm vault-mcp-server / mcp-grafana cross-build).
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=registry,oci-mediatypes=true,compression=estargz,compression-level=9,force-compression=true
+          sbom: true
+          provenance: true
+
+      - name: Push git tag
+        if: success() && github.ref_type != 'tag'
+        run: |
+          NEW_TAG=${{ steps.calculate_tag.outputs.tag }}
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$NEW_TAG"
+          git push origin "$NEW_TAG"
