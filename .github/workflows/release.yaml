@@ -17,12 +17,17 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
 
+env:
+  IMAGE: ghcr.io/thekoma/hermes-iris
+
 jobs:
-  build-and-release:
+  # -----------------------------------------------------------------
+  # 1. Compute the tag once, on a single runner, share via outputs.
+  # -----------------------------------------------------------------
+  prepare:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write   # push the calculated git tag
-      packages: write   # push to ghcr.io
+    outputs:
+      tag: ${{ steps.calc.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -30,7 +35,7 @@ jobs:
           fetch-depth: 0
 
       - name: Calculate next tag (YYYY.MM.N)
-        id: calculate_tag
+        id: calc
         run: |
           set -e
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
@@ -49,8 +54,94 @@ jobs:
           fi
           echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+  # -----------------------------------------------------------------
+  # 2. Native per-arch builds (no QEMU): amd64 on ubuntu-latest,
+  #    arm64 on ubuntu-24.04-arm. Each pushes a digest-only image;
+  #    the merge job stitches them into a multi-arch manifest.
+  # -----------------------------------------------------------------
+  build:
+    needs: prepare
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Prepare platform pair
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          # Per-arch artefact: no tag yet, just push the image by digest.
+          # The merge job assembles the multi-arch tag list.
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true,compression=estargz,compression-level=9,force-compression=true
+          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
+          sbom: true
+          provenance: true
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # -----------------------------------------------------------------
+  # 3. Stitch the per-arch digests into a single multi-arch manifest
+  #    and apply the human-friendly tags. Then push a git tag.
+  # -----------------------------------------------------------------
+  merge:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # push the git tag
+      packages: write   # push the manifest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4
@@ -66,32 +157,32 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/thekoma/hermes-iris
+          images: ${{ env.IMAGE }}
           tags: |
-            type=raw,value=${{ steps.calculate_tag.outputs.tag }}
+            type=raw,value=${{ needs.prepare.outputs.tag }}
             type=raw,value=latest
             type=schedule,pattern=latest-nightly
 
-      - name: Build and push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: true
-          # Start with amd64 only (matches openklaw-katerine; arm64 can be
-          # added once we confirm vault-mcp-server / mcp-grafana cross-build).
-          platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          outputs: type=registry,oci-mediatypes=true,compression=estargz,compression-level=9,force-compression=true
-          sbom: true
-          provenance: true
+      - name: Create multi-arch manifest and push
+        working-directory: /tmp/digests
+        run: |
+          set -e
+          # Build the -t flag list from the metadata-action output (one tag per line).
+          TAG_FLAGS=$(printf -- '-t %s ' ${{ steps.meta.outputs.tags }})
+          # Each downloaded file's name is the per-arch digest. Reference all of them.
+          REFS=$(printf '${{ env.IMAGE }}@sha256:%s ' *)
+          echo "Tags:  $TAG_FLAGS"
+          echo "Refs:  $REFS"
+          docker buildx imagetools create $TAG_FLAGS $REFS
+
+      - name: Inspect resulting image
+        run: |
+          docker buildx imagetools inspect ${{ env.IMAGE }}:${{ needs.prepare.outputs.tag }}
 
       - name: Push git tag
         if: success() && github.ref_type != 'tag'
         run: |
-          NEW_TAG=${{ steps.calculate_tag.outputs.tag }}
+          NEW_TAG=${{ needs.prepare.outputs.tag }}
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag "$NEW_TAG"
