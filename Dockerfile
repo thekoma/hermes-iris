@@ -71,8 +71,9 @@ ENV PATH="$PNPM_HOME/bin:$PATH"
 COPY scripts/install-global-pnpm.sh /tmp/scripts/install-global-pnpm.sh
 RUN apt-get update && \
     apt-get install -yq --no-install-recommends pipx && \
+    mkdir -p "$PIPX_HOME" && \
     /tmp/scripts/install-global-pnpm.sh && \
-    chown -R 10000:10000 "$PNPM_HOME" /opt/pipx && \
+    chown -R 10000:10000 "$PNPM_HOME" "$PIPX_HOME" && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 # Cleanup our staging dir.
