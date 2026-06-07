@@ -1,0 +1,43 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "schedule": [
+    "before 3am"
+  ],
+  "automerge": true,
+  "packageRules": [
+    {
+      "description": "Automerge non-major updates by default",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Always automerge upstream hermes-agent bumps",
+      "matchPackageNames": ["nousresearch/hermes-agent"],
+      "matchDatasources": ["docker"],
+      "automerge": true
+    },
+    {
+      "description": "Kubernetes/kubectl bumps need human review (k8s major-minor cadence)",
+      "matchPackageNames": ["kubernetes/kubernetes"],
+      "matchDatasources": ["github-releases"],
+      "automerge": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Pinned ARG NAME=value lines annotated with a renovate comment in the Dockerfile",
+      "managerFilePatterns": ["/^Dockerfile$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?\\s+ARG \\w+=(?<currentValue>[\\w.+-]+)"
+      ],
+      "versioningTemplate": "semver"
+    }
+  ]
+}
