@@ -20,10 +20,10 @@ RUN apk add --no-cache git make bash
 
 RUN go install github.com/grafana/mcp-grafana/cmd/mcp-grafana@${MCP_GRAFANA_VERSION}
 
-RUN git clone --depth 1 --branch ${VAULT_MCP_SERVER_VERSION} \
-        https://github.com/hashicorp/vault-mcp-server.git && \
-    cd vault-mcp-server && make build && \
-    cp bin/vault-mcp-server /go/bin/vault-mcp-server
+# Upstream's Makefile sets GOARCH=$(uname -m), which on aarch64 hosts
+# becomes "aarch64" — invalid in Go's GOOS/GOARCH (Go uses "arm64").
+# `go install` honours the buildx-provided TARGETARCH automatically.
+RUN go install github.com/hashicorp/vault-mcp-server/cmd/vault-mcp-server@${VAULT_MCP_SERVER_VERSION}
 
 RUN ls -altr /go/bin
 
