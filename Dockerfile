@@ -36,6 +36,8 @@ ARG ARGOCD_VERSION=v3.4.3
 ARG HELM_VERSION=v4.2.0
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
 ARG KUBECTL_VERSION=v1.35.1
+# renovate: datasource=npm depName=@anthropic-ai/claude-code
+ARG CLAUDE_CODE_VERSION=2.1.173
 # Provided by buildx: amd64|arm64 — matches the target platform.
 ARG TARGETARCH
 
@@ -46,6 +48,7 @@ COPY scripts/install-clitools.sh /tmp/install-clitools.sh
 RUN ARGOCD_VERSION="$ARGOCD_VERSION" \
     HELM_VERSION="$HELM_VERSION" \
     KUBECTL_VERSION="$KUBECTL_VERSION" \
+    CLAUDE_CODE_VERSION="$CLAUDE_CODE_VERSION" \
     ARCH="$TARGETARCH" \
     /tmp/install-clitools.sh
 
@@ -63,6 +66,9 @@ RUN /tmp/scripts/install-system-pkgs.sh
 COPY --from=clitools /out/argocd  /usr/local/bin/argocd
 COPY --from=clitools /out/helm    /usr/local/bin/helm
 COPY --from=clitools /out/kubectl /usr/local/bin/kubectl
+COPY --from=clitools /out/claude  /usr/local/bin/claude
+# The baked claude binary is root-owned; don't let it try to self-update.
+ENV DISABLE_AUTOUPDATER=1
 
 # --- Go MCP server binaries from the gobuilder stage ---
 COPY --from=gobuilder /go/bin/mcp-grafana       /usr/local/bin/mcp-grafana
