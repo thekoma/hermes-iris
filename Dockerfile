@@ -27,7 +27,29 @@ RUN go install github.com/hashicorp/vault-mcp-server/cmd/vault-mcp-server@${VAUL
 
 RUN ls -altr /go/bin
 
-# ---------- Stage 2: hermes base + extra tools ----------
+# ---------- Stage 2: CLI release binaries (downloaded, stripped) ----------
+FROM debian:trixie-slim AS clitools
+
+# renovate: datasource=github-releases depName=argoproj/argo-cd
+ARG ARGOCD_VERSION=v3.4.3
+# renovate: datasource=github-releases depName=helm/helm
+ARG HELM_VERSION=v4.2.0
+# renovate: datasource=github-releases depName=kubernetes/kubernetes
+ARG KUBECTL_VERSION=v1.35.1
+# Provided by buildx: amd64|arm64 — matches the target platform.
+ARG TARGETARCH
+
+RUN apt-get update && \
+    apt-get install -yq --no-install-recommends ca-certificates curl binutils
+
+COPY scripts/install-clitools.sh /tmp/install-clitools.sh
+RUN ARGOCD_VERSION="$ARGOCD_VERSION" \
+    HELM_VERSION="$HELM_VERSION" \
+    KUBECTL_VERSION="$KUBECTL_VERSION" \
+    ARCH="$TARGETARCH" \
+    /tmp/install-clitools.sh
+
+# ---------- Stage 3: hermes base + extra tools ----------
 # HERMES_VERSION is declared globally above; ${HERMES_VERSION} substitutes here.
 FROM nousresearch/hermes-agent:${HERMES_VERSION}
 
@@ -37,25 +59,10 @@ USER root
 COPY scripts/install-system-pkgs.sh /tmp/scripts/install-system-pkgs.sh
 RUN /tmp/scripts/install-system-pkgs.sh
 
-# --- pinned CLI binary downloads ---
-# renovate: datasource=github-releases depName=argoproj/argo-cd
-ARG ARGOCD_VERSION=v3.4.3
-# renovate: datasource=github-releases depName=helm/helm
-ARG HELM_VERSION=v4.2.0
-# renovate: datasource=github-releases depName=envoyproxy/gateway
-ARG EGCTL_VERSION=v1.5.0
-# renovate: datasource=github-releases depName=kubernetes/kubernetes
-ARG KUBECTL_VERSION=v1.35.1
-# renovate: datasource=github-releases depName=hashicorp/vault
-ARG VAULT_CLI_VERSION=v1.20.0
-
-COPY scripts/install-clitools.sh /tmp/scripts/install-clitools.sh
-RUN ARGOCD_VERSION="$ARGOCD_VERSION" \
-    HELM_VERSION="$HELM_VERSION" \
-    EGCTL_VERSION="$EGCTL_VERSION" \
-    KUBECTL_VERSION="$KUBECTL_VERSION" \
-    VAULT_CLI_VERSION="$VAULT_CLI_VERSION" \
-    /tmp/scripts/install-clitools.sh
+# --- pinned CLI binaries from the clitools stage ---
+COPY --from=clitools /out/argocd  /usr/local/bin/argocd
+COPY --from=clitools /out/helm    /usr/local/bin/helm
+COPY --from=clitools /out/kubectl /usr/local/bin/kubectl
 
 # --- Go MCP server binaries from the gobuilder stage ---
 COPY --from=gobuilder /go/bin/mcp-grafana       /usr/local/bin/mcp-grafana
@@ -74,7 +81,10 @@ RUN apt-get update && \
     mkdir -p "$PIPX_HOME" && \
     /tmp/scripts/install-global-pnpm.sh && \
     chown -R 10000:10000 "$PNPM_HOME" "$PIPX_HOME" && \
-    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+    # corepack/pnpm download+metadata caches are build-time junk; the global
+    # store under $PNPM_HOME (hardlink source) must stay.
+    rm -rf /root/.cache /tmp/node-compile-cache \
+        /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 # Cleanup our staging dir.
 RUN rm -rf /tmp/scripts

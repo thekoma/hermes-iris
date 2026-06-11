@@ -100,7 +100,10 @@ jobs:
           platforms: ${{ matrix.platform }}
           # Per-arch artefact: no tag yet, just push the image by digest.
           # The merge job assembles the multi-arch tag list.
-          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true,compression=estargz,compression-level=9,force-compression=true
+          # Plain gzip: estargz needs the stargz snapshotter and is flaky on
+          # stock containerd; force-compression also re-compressed every
+          # upstream base layer for nothing.
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true
           cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
           sbom: true
