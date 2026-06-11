@@ -1,0 +1,21 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# Sync the image-baked agentmemory hermes plugin into the persistent
+# $HERMES_HOME volume on every boot, so an image upgrade refreshes the
+# plugin without manual copies. Local edits under plugins/agentmemory
+# are therefore clobbered by design — the image is the source of truth.
+#
+# Runs as root after 01-hermes-setup (which seeds and chowns
+# $HERMES_HOME) thanks to the lexicographic ordering of
+# /etc/cont-init.d. Activation still requires the user-owned config:
+#   memory.provider: agentmemory   (in $HERMES_HOME/config.yaml)
+set -eu
+
+SRC=/opt/agentmemory-hermes-plugin
+[ -d "$SRC" ] || exit 0
+[ -n "${HERMES_HOME:-}" ] && [ -d "${HERMES_HOME:-}" ] || exit 0
+
+DST="$HERMES_HOME/plugins/agentmemory"
+mkdir -p "$DST"
+cp -R "$SRC"/. "$DST"/
+chown -R 10000:10000 "$HERMES_HOME/plugins"

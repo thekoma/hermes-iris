@@ -7,12 +7,20 @@ set -euo pipefail
 
 PACKAGES=(
     mcporter
+    "@anthropic-ai/claude-code"
+    # MCP bridge to the production agentmemory instance (AGENTMEMORY_URL);
+    # the server itself runs elsewhere, so no @agentmemory/agentmemory here.
+    "@agentmemory/mcp"
 )
 
 # Packages whose postinstall scripts MUST run.  pnpm 10+ refuses lifecycle
 # scripts unless explicitly allowed.  Add entries here only if a baseline
 # package above ships native bindings that fail without postinstall.
-ALLOW_BUILDS=()
+ALLOW_BUILDS=(
+    # postinstall downloads the platform-native claude binary; without it
+    # the CLI exits with "claude native binary not installed".
+    "@anthropic-ai/claude-code"
+)
 
 ALLOW_BUILD_ARGS=()
 for pkg in "${ALLOW_BUILDS[@]}"; do

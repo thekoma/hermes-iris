@@ -86,6 +86,18 @@ RUN apt-get update && \
     rm -rf /root/.cache /tmp/node-compile-cache \
         /var/lib/apt/lists/* /var/cache/apt/archives/*
 
+# --- agentmemory hermes plugin (pure-stdlib Python, no deps) ---
+# Staged in the image; HERMES_HOME lives on a volume, so activate it with:
+#   cp -r /opt/agentmemory-hermes-plugin $HERMES_HOME/plugins/agentmemory
+# plus `memory.provider: agentmemory` in config.yaml (see its README).
+# renovate: datasource=github-tags depName=rohitg00/agentmemory
+ARG AGENTMEMORY_VERSION=v0.9.27
+ADD --chown=10000:10000 \
+    https://github.com/rohitg00/agentmemory.git#${AGENTMEMORY_VERSION}:integrations/hermes \
+    /opt/agentmemory-hermes-plugin
+# Boot-time sync of the plugin into the $HERMES_HOME volume (s6 cont-init).
+COPY --chmod=0755 scripts/cont-init.d/03-agentmemory-plugin /etc/cont-init.d/03-agentmemory-plugin
+
 # Cleanup our staging dir.
 RUN rm -rf /tmp/scripts
 
