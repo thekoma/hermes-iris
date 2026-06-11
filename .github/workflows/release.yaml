@@ -181,7 +181,13 @@ jobs:
 
       - name: Inspect resulting image
         run: |
-          docker buildx imagetools inspect ${{ env.IMAGE }}:${{ needs.prepare.outputs.tag }}
+          # GHCR is eventually consistent: a tag pushed moments ago can 404.
+          for i in 1 2 3 4 5; do
+            docker buildx imagetools inspect ${{ env.IMAGE }}:${{ needs.prepare.outputs.tag }} && exit 0
+            echo "Tag not visible yet, retrying in ${i}0s..."
+            sleep "${i}0"
+          done
+          exit 1
 
       - name: Push git tag
         if: success() && github.ref_type != 'tag'
