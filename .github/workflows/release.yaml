@@ -165,10 +165,14 @@ jobs:
 
       - name: Create multi-arch manifest and push
         working-directory: /tmp/digests
+        env:
+          # Multi-line output: inlining it via ${{ }} would splice raw newlines
+          # into the script and execute each tag as a command.
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -e
           # Build the -t flag list from the metadata-action output (one tag per line).
-          TAG_FLAGS=$(printf -- '-t %s ' ${{ steps.meta.outputs.tags }})
+          TAG_FLAGS=$(printf -- '-t %s ' $TAGS)
           # Each downloaded file's name is the per-arch digest. Reference all of them.
           REFS=$(printf '${{ env.IMAGE }}@sha256:%s ' *)
           echo "Tags:  $TAG_FLAGS"
