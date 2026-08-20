@@ -18,4 +18,6 @@ SRC=/opt/agentmemory-hermes-plugin
 DST="$HERMES_HOME/plugins/agentmemory"
 mkdir -p "$DST"
 cp -R "$SRC"/. "$DST"/
-chown -R 10000:10000 "$HERMES_HOME/plugins"
+# By name, not by number: stage2-hook.sh may have remapped the hermes
+# user via HERMES_UID/HERMES_GID before we get here.
+chown -R hermes:hermes "$HERMES_HOME/plugins"

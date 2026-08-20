@@ -25,9 +25,17 @@ for pkg in "${ALLOW_BUILDS[@]}"; do
     ALLOW_BUILD_ARGS+=("--allow-build=$pkg")
 done
 
-# Bootstrap pnpm via corepack (already shipped with upstream node 22 LTS).
-corepack enable pnpm
-corepack prepare pnpm@latest --activate
+# Bootstrap pnpm.  Upstream shipped corepack while it was on node 22, but as of
+# node 26 (v26.5.1 in the base image) corepack is no longer bundled — it was
+# unbundled in node 25 — so `corepack enable` exits 127 and takes the build with
+# it.  Prefer it when present, otherwise install pnpm straight from npm; either
+# way pnpm lands in /usr/local/bin, which is npm's global prefix here.
+if command -v corepack >/dev/null 2>&1; then
+    corepack enable pnpm
+    corepack prepare pnpm@latest --activate
+else
+    npm install -g pnpm@latest
+fi
 
 mkdir -p "$PNPM_HOME/bin"
 pnpm add -g "${ALLOW_BUILD_ARGS[@]}" "${PACKAGES[@]}"

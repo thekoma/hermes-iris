@@ -1,3 +1,5 @@
 backup/**
 .DS_Store
 *.log
+**/.env
+**/gcp-sa.json

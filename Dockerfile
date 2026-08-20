@@ -107,11 +107,23 @@ COPY --chmod=0755 scripts/cont-init.d/03-agentmemory-plugin /etc/cont-init.d/03-
 # Cleanup our staging dir.
 RUN rm -rf /tmp/scripts
 
-# IMPORTANT: do not redefine ENTRYPOINT or CMD — the upstream image sets
-#   ENTRYPOINT ["/init", "/opt/hermes/docker/main-wrapper.sh"]
-#   CMD []
-# which routes args through s6-overlay and the privilege-drop shim.  Our
-# kubernetes manifest passes `args: ["gateway", "run"]` at runtime.
+# Convenience alias only.  /opt/data is the hermes user's real home per
+# /etc/passwd and is what main-wrapper.sh exports as $HOME; this symlink just
+# gives it a name a human expects to find.  Nothing depends on it, and it is a
+# harmless dangling link when the volume is absent.
+RUN ln -sfn /opt/data /home/hermes
 
-# Re-assume the unprivileged user defined by upstream (UID 10000).
-USER hermes
+# IMPORTANT: do not redefine ENTRYPOINT, CMD or USER.
+#
+# Upstream sets ENTRYPOINT ["/opt/hermes/docker/entrypoint-dispatch.sh"] and
+# CMD [].  The dispatcher delegates to s6-overlay's /init when it is PID 1 (and
+# warns + runs an unsupervised fallback when it is not), /init runs the
+# /etc/cont-init.d scripts as root, and main-wrapper.sh finally drops to the
+# hermes user with s6-setuidgid.  Our kubernetes manifest passes
+# `args: ["gateway", "run"]` at runtime.
+#
+# The image therefore MUST stay root at boot: stage2-hook.sh needs privileges
+# to usermod/chown the data volume, and main-wrapper.sh hard-fails (exit 1) on
+# any uid that is neither root nor hermes.  A trailing `USER hermes` here — or
+# a runAsUser in Kubernetes — stops the container from starting.  To control
+# ownership of the volume, pass HERMES_UID/HERMES_GID (or PUID/PGID) instead.
