@@ -2,6 +2,7 @@
 # Install pnpm global packages into $PNPM_HOME/bin (see Dockerfile).
 # Edit this list to add/remove tools — changes invalidate only this layer.
 set -euo pipefail
+trap 'echo "install-global-pnpm.sh: failed at line $LINENO" >&2' ERR
 
 : "${PNPM_HOME:?PNPM_HOME is required}"
 
@@ -50,11 +51,14 @@ pnpm add -g "${ALLOW_BUILD_ARGS[@]}" "${PACKAGES[@]}"
 # root-owned).
 
 # Delete every hardlink of each file read from stdin, then the file itself.
+# The -samefile sweep races with its own deletions (a link can vanish while
+# find walks the tree), so its exit status is tolerated — but stderr stays
+# visible and failing to remove the payload itself is fatal.
 prune_inodes() {
     while IFS= read -r f; do
         [ -e "$f" ] || continue
-        find "$PNPM_HOME" -samefile "$f" ! -path "$f" -delete 2>/dev/null || true
-        rm -f "$f"
+        find "$PNPM_HOME" -samefile "$f" ! -path "$f" -delete || true
+        rm -f "$f" || { echo "failed to prune $f" >&2; return 1; }
     done
 }
 
@@ -73,10 +77,27 @@ find "$PNPM_HOME" -type f -size +5M -path "*onnxruntime-web*" -print | prune_ino
 #    already bakes at /usr/local/bin/claude — swap it for a symlink.
 find "$PNPM_HOME" -type f -size +100M -path "*claude-agent-sdk*" -name claude \
     -print | while IFS= read -r f; do
-        find "$PNPM_HOME" -samefile "$f" ! -path "$f" -delete 2>/dev/null || true
+        find "$PNPM_HOME" -samefile "$f" ! -path "$f" -delete || true
         rm -f "$f"
         ln -s /usr/local/bin/claude "$f"
 done
 
 # 4. Orphaned store payloads left behind by the pruning above.
 find "$PNPM_HOME" -type f -size +5M -links 1 -delete
+
+# --- verify the pruning did not eat anything the CLIs need ---
+# The find-based deletion above is heuristic: a mis-sized or mis-pathed match
+# would silently strip a package payload and only surface as a broken command
+# inside a running container. Fail the build here instead.
+broken=0
+for link in "$PNPM_HOME/bin"/*; do
+    [ -e "$link" ] && continue
+    [ -L "$link" ] || continue   # unmatched glob, not a broken entry
+    echo "dangling global bin after prune: $link -> $(readlink "$link")" >&2
+    broken=1
+done
+if ! pnpm list -g --depth=0 >/dev/null; then
+    echo "pnpm can no longer read its global store after pruning" >&2
+    broken=1
+fi
+[ "$broken" -eq 0 ]

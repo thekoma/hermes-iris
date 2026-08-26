@@ -20,6 +20,13 @@ concurrency:
 env:
   IMAGE: ghcr.io/thekoma/hermes-iris
 
+# `shell: bash` runs every step with `-e -o pipefail`, so a failing command in
+# the middle of a pipeline fails the step instead of being masked by the exit
+# status of the last one.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # -----------------------------------------------------------------
   # 1. Compute the tag once, on a single runner, share via outputs.
@@ -37,7 +44,7 @@ jobs:
       - name: Calculate next tag (YYYY.MM.N)
         id: calc
         run: |
-          set -e
+          set -euo pipefail
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
             exit 0
@@ -48,7 +55,13 @@ jobs:
           if [ -z "$LAST_TAG" ]; then
             NEW_TAG="${PREFIX}.0"
           else
-            SUFFIX="${LAST_TAG#${PREFIX}.}"
+            SUFFIX="${LAST_TAG#"${PREFIX}."}"
+            # A stray tag like 2026.08.1-rc1 would make $((...)) fail with a
+            # confusing arithmetic error under set -e.
+            if [[ ! "$SUFFIX" =~ ^[0-9]+$ ]]; then
+              echo "::error::cannot derive next tag: '$LAST_TAG' has non-numeric suffix '$SUFFIX'"
+              exit 1
+            fi
             NEW_SUFFIX=$((SUFFIX + 1))
             NEW_TAG="${PREFIX}.${NEW_SUFFIX}"
           fi
@@ -111,8 +124,15 @@ jobs:
 
       - name: Export digest
         run: |
-          mkdir -p /tmp/digests
+          set -euo pipefail
           digest="${{ steps.build.outputs.digest }}"
+          # An empty digest would `touch` the directory itself and let the job
+          # pass with nothing published for this platform.
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::build did not report a valid digest (got '$digest')"
+            exit 1
+          fi
+          mkdir -p /tmp/digests
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
@@ -173,18 +193,42 @@ jobs:
           # into the script and execute each tag as a command.
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          set -e
-          # Build the -t flag list from the metadata-action output (one tag per line).
-          TAG_FLAGS=$(printf -- '-t %s ' $TAGS)
+          set -euo pipefail
+          if [ -z "${TAGS//[[:space:]]/}" ]; then
+            echo "::error::docker/metadata-action produced no tags"
+            exit 1
+          fi
+          # Without nullglob an empty digests dir yields the literal '*' and we
+          # would hand imagetools a bogus reference.
+          shopt -s nullglob
+          DIGEST_FILES=(*)
+          if [ ${#DIGEST_FILES[@]} -eq 0 ]; then
+            echo "::error::no per-arch digests were downloaded; nothing to stitch"
+            exit 1
+          fi
+          # Arrays, not word-split strings: a tag or digest containing spaces
+          # then fails loudly on the docker call instead of silently mangling
+          # the argument list.
+          TAG_FLAGS=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            TAG_FLAGS+=(-t "$tag")
+          done <<< "$TAGS"
           # Each downloaded file's name is the per-arch digest. Reference all of them.
-          REFS=$(printf '${{ env.IMAGE }}@sha256:%s ' *)
-          echo "Tags:  $TAG_FLAGS"
-          echo "Refs:  $REFS"
-          docker buildx imagetools create $TAG_FLAGS $REFS
+          REFS=()
+          for d in "${DIGEST_FILES[@]}"; do
+            REFS+=("${{ env.IMAGE }}@sha256:$d")
+          done
+          echo "Tags:  ${TAG_FLAGS[*]}"
+          echo "Refs:  ${REFS[*]}"
+          docker buildx imagetools create "${TAG_FLAGS[@]}" "${REFS[@]}"
 
       - name: Inspect resulting image
         run: |
+          set -uo pipefail
           # GHCR is eventually consistent: a tag pushed moments ago can 404.
+          # Retries are expected here, so no `set -e`; the loop exits 1 itself
+          # when the tag never becomes visible.
           for i in 1 2 3 4 5; do
             docker buildx imagetools inspect ${{ env.IMAGE }}:${{ needs.prepare.outputs.tag }} && exit 0
             echo "Tag not visible yet, retrying in ${i}0s..."
@@ -195,6 +239,7 @@ jobs:
       - name: Push git tag
         if: success() && github.ref_type != 'tag'
         run: |
+          set -euo pipefail
           NEW_TAG=${{ needs.prepare.outputs.tag }}
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
