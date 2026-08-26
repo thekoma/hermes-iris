@@ -81,10 +81,20 @@ ENV PIP_NO_CACHE_DIR=1
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH="$PNPM_HOME/bin:$PATH"
 
+# renovate: datasource=npm depName=pnpm
+ARG PNPM_VERSION=11.22.0
+# renovate: datasource=npm depName=mcporter
+ARG MCPORTER_VERSION=0.13.7
+# renovate: datasource=npm depName=@agentmemory/mcp
+ARG AGENTMEMORY_MCP_VERSION=0.9.29
+
 COPY scripts/install-global-pnpm.sh /tmp/scripts/install-global-pnpm.sh
 RUN apt-get update && \
     apt-get install -yq --no-install-recommends pipx && \
     mkdir -p "$PIPX_HOME" && \
+    PNPM_VERSION="$PNPM_VERSION" \
+    MCPORTER_VERSION="$MCPORTER_VERSION" \
+    AGENTMEMORY_MCP_VERSION="$AGENTMEMORY_MCP_VERSION" \
     /tmp/scripts/install-global-pnpm.sh && \
     chown -R 10000:10000 "$PNPM_HOME" "$PIPX_HOME" && \
     # corepack/pnpm download+metadata caches are build-time junk; the global

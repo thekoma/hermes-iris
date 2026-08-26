@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
-# Install pnpm global packages into $PNPM_HOME/bin (see Dockerfile).
+# Install pinned pnpm global packages into $PNPM_HOME/bin (see Dockerfile).
+# Versions are pinned in the Dockerfile ARGs and bumped by Renovate.
 # Edit this list to add/remove tools — changes invalidate only this layer.
 set -euo pipefail
 
 : "${PNPM_HOME:?PNPM_HOME is required}"
+: "${PNPM_VERSION:?PNPM_VERSION is required}"
+: "${MCPORTER_VERSION:?MCPORTER_VERSION is required}"
+: "${AGENTMEMORY_MCP_VERSION:?AGENTMEMORY_MCP_VERSION is required}"
 
 PACKAGES=(
-    mcporter
+    "mcporter@${MCPORTER_VERSION}"
     # MCP bridge to the production agentmemory instance (AGENTMEMORY_URL);
     # the server itself runs elsewhere, so no @agentmemory/agentmemory here.
     # claude-code is NOT here on purpose: its npm package ships the 236M
     # native binary four times over — the Dockerfile bakes the single
     # official binary via the clitools stage instead.
-    "@agentmemory/mcp"
+    "@agentmemory/mcp@${AGENTMEMORY_MCP_VERSION}"
 )
 
 # Packages whose postinstall scripts MUST run.  pnpm 10+ refuses lifecycle
@@ -32,9 +36,9 @@ done
 # way pnpm lands in /usr/local/bin, which is npm's global prefix here.
 if command -v corepack >/dev/null 2>&1; then
     corepack enable pnpm
-    corepack prepare pnpm@latest --activate
+    corepack prepare pnpm@"${PNPM_VERSION}" --activate
 else
-    npm install -g pnpm@latest
+    npm install -g pnpm@"${PNPM_VERSION}"
 fi
 
 mkdir -p "$PNPM_HOME/bin"
