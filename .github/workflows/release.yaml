@@ -182,7 +182,6 @@ jobs:
           # Multi-line output: inlining it via ${{ }} would splice raw newlines
           # into the script and execute each tag as a command.
           TAGS: ${{ steps.meta.outputs.tags }}
-          IMAGE: ${{ env.IMAGE }}
         run: |
           set -e
           # Build the -t flag list from the metadata-action output (one tag per line).
@@ -202,7 +201,6 @@ jobs:
 
       - name: Inspect resulting image
         env:
-          IMAGE: ${{ env.IMAGE }}
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           # GHCR is eventually consistent: a tag pushed moments ago can 404.
