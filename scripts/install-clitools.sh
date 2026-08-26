@@ -5,28 +5,26 @@
 # Vault and Envoy Gateway are covered by their MCP servers — no fat CLIs.
 set -euo pipefail
 
-: "${ARGOCD_VERSION:?ARGOCD_VERSION is required}"
-: "${HELM_VERSION:?HELM_VERSION is required}"
-: "${KUBECTL_VERSION:?KUBECTL_VERSION is required}"
-: "${CLAUDE_CODE_VERSION:?CLAUDE_CODE_VERSION is required}"
-: "${ARCH:?ARCH is required (amd64|arm64)}"
+# shellcheck source=scripts/lib/common.sh
+. "${BASH_SOURCE[0]%/*}/lib/common.sh"
+
+require_env ARGOCD_VERSION HELM_VERSION KUBECTL_VERSION CLAUDE_CODE_VERSION ARCH
 
 mkdir -p /out
 
 # --- argocd ---
-curl -fsSL \
+fetch_bin \
     "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-${ARCH}" \
-    -o /out/argocd
+    /out/argocd
 
 # --- helm ---
 curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-${ARCH}.tar.gz" \
     | tar xz --strip-components=1 -C /out "linux-${ARCH}/helm"
+chmod +x /out/helm
 
 # --- kubectl ---
-curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" \
-    -o /out/kubectl
-
-chmod +x /out/argocd /out/helm /out/kubectl
+fetch_bin "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" \
+    /out/kubectl
 
 # --- claude-code (single native binary) ---
 # The npm package ships the 236M binary four times over (claude.exe, the

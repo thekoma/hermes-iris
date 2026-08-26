@@ -41,16 +41,19 @@ ARG CLAUDE_CODE_VERSION=2.1.173
 # Provided by buildx: amd64|arm64 — matches the target platform.
 ARG TARGETARCH
 
-RUN apt-get update && \
-    apt-get install -yq --no-install-recommends ca-certificates curl binutils
+# scripts/lib is its own COPY: it changes rarely, so the per-script layers
+# below stay independently cacheable.
+COPY scripts/lib /tmp/scripts/lib
+COPY scripts/apt-install.sh /tmp/scripts/apt-install.sh
+RUN /tmp/scripts/apt-install.sh ca-certificates curl binutils
 
-COPY scripts/install-clitools.sh /tmp/install-clitools.sh
+COPY scripts/install-clitools.sh /tmp/scripts/install-clitools.sh
 RUN ARGOCD_VERSION="$ARGOCD_VERSION" \
     HELM_VERSION="$HELM_VERSION" \
     KUBECTL_VERSION="$KUBECTL_VERSION" \
     CLAUDE_CODE_VERSION="$CLAUDE_CODE_VERSION" \
     ARCH="$TARGETARCH" \
-    /tmp/install-clitools.sh
+    /tmp/scripts/install-clitools.sh
 
 # ---------- Stage 3: hermes base + extra tools ----------
 # HERMES_VERSION is declared globally above; ${HERMES_VERSION} substitutes here.
@@ -59,6 +62,8 @@ FROM nousresearch/hermes-agent:${HERMES_VERSION}
 USER root
 
 # --- apt packages (shell QoL on top of upstream's set) ---
+COPY scripts/lib /tmp/scripts/lib
+COPY scripts/apt-install.sh /tmp/scripts/apt-install.sh
 COPY scripts/install-system-pkgs.sh /tmp/scripts/install-system-pkgs.sh
 RUN /tmp/scripts/install-system-pkgs.sh
 
@@ -82,15 +87,13 @@ ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH="$PNPM_HOME/bin:$PATH"
 
 COPY scripts/install-global-pnpm.sh /tmp/scripts/install-global-pnpm.sh
-RUN apt-get update && \
-    apt-get install -yq --no-install-recommends pipx && \
+RUN /tmp/scripts/apt-install.sh pipx && \
     mkdir -p "$PIPX_HOME" && \
     /tmp/scripts/install-global-pnpm.sh && \
     chown -R 10000:10000 "$PNPM_HOME" "$PIPX_HOME" && \
     # corepack/pnpm download+metadata caches are build-time junk; the global
     # store under $PNPM_HOME (hardlink source) must stay.
-    rm -rf /root/.cache /tmp/node-compile-cache \
-        /var/lib/apt/lists/* /var/cache/apt/archives/*
+    rm -rf /root/.cache /tmp/node-compile-cache
 
 # --- agentmemory hermes plugin (pure-stdlib Python, no deps) ---
 # Staged in the image; HERMES_HOME lives on a volume, so activate it with:

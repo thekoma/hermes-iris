@@ -3,7 +3,10 @@
 # Edit this list to add/remove tools — changes invalidate only this layer.
 set -euo pipefail
 
-: "${PNPM_HOME:?PNPM_HOME is required}"
+# shellcheck source=scripts/lib/common.sh
+. "${BASH_SOURCE[0]%/*}/lib/common.sh"
+
+require_env PNPM_HOME
 
 PACKAGES=(
     mcporter
@@ -53,8 +56,7 @@ pnpm add -g "${ALLOW_BUILD_ARGS[@]}" "${PACKAGES[@]}"
 prune_inodes() {
     while IFS= read -r f; do
         [ -e "$f" ] || continue
-        find "$PNPM_HOME" -samefile "$f" ! -path "$f" -delete 2>/dev/null || true
-        rm -f "$f"
+        unlink_hardlinks "$PNPM_HOME" "$f"
     done
 }
 
@@ -73,8 +75,7 @@ find "$PNPM_HOME" -type f -size +5M -path "*onnxruntime-web*" -print | prune_ino
 #    already bakes at /usr/local/bin/claude — swap it for a symlink.
 find "$PNPM_HOME" -type f -size +100M -path "*claude-agent-sdk*" -name claude \
     -print | while IFS= read -r f; do
-        find "$PNPM_HOME" -samefile "$f" ! -path "$f" -delete 2>/dev/null || true
-        rm -f "$f"
+        unlink_hardlinks "$PNPM_HOME" "$f"
         ln -s /usr/local/bin/claude "$f"
 done
 
