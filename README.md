@@ -41,6 +41,15 @@ docker run --rm --entrypoint /bin/bash hermes-iris:smoke -c '
 '
 ```
 
+## Unit tests
+
+The shell installers and boot-time plugin sync can be tested without network
+access or root privileges:
+
+```sh
+tests/run.sh
+```
+
 ## Deployment
 
 Consumed by `applications/odin/hermes/` in

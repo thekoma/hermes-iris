@@ -1,0 +1,37 @@
+#!/bin/bash
+set -euo pipefail
+
+command_name=${0##*/}
+printf '%s' "$command_name" >>"$COMMAND_LOG"
+printf ' <%s>' "$@" >>"$COMMAND_LOG"
+printf '\n' >>"$COMMAND_LOG"
+
+case "$command_name" in
+    bash)
+        cat >/dev/null
+        mkdir -p "$HOME/.local/bin"
+        printf 'claude\n' >"$HOME/.local/bin/claude"
+        ;;
+    curl)
+        output=
+        while (($#)); do
+            if [[ $1 == -o ]]; then
+                output=$2
+                break
+            fi
+            shift
+        done
+        if [[ -n $output ]]; then
+            printf 'download\n' >"$output"
+        else
+            printf 'download\n'
+        fi
+        ;;
+    node)
+        printf 'x64\n'
+        ;;
+    tar)
+        cat >/dev/null
+        printf 'helm\n' >"$OUT_DIR/helm"
+        ;;
+esac
