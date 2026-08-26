@@ -9,15 +9,37 @@
 # $HERMES_HOME) thanks to the lexicographic ordering of
 # /etc/cont-init.d. Activation still requires the user-owned config:
 #   memory.provider: agentmemory   (in $HERMES_HOME/config.yaml)
+#
+# Failures are loud: every skip path logs why, and a sync that starts but
+# cannot finish exits non-zero so s6 aborts the boot rather than leaving a
+# half-copied plugin behind.
 set -eu
 
+log() { echo "03-agentmemory-plugin: $*" >&2; }
+
 SRC=/opt/agentmemory-hermes-plugin
-[ -d "$SRC" ] || exit 0
-[ -n "${HERMES_HOME:-}" ] && [ -d "${HERMES_HOME:-}" ] || exit 0
+if [ ! -d "$SRC" ]; then
+    # The Dockerfile always ADDs this, so its absence means the image was
+    # built wrong or the path moved upstream.
+    log "WARNING: $SRC missing, skipping plugin sync"
+    exit 0
+fi
+if [ -z "${HERMES_HOME:-}" ]; then
+    log "WARNING: HERMES_HOME unset, skipping plugin sync"
+    exit 0
+fi
+if [ ! -d "$HERMES_HOME" ]; then
+    log "WARNING: HERMES_HOME=$HERMES_HOME is not a directory, skipping plugin sync"
+    exit 0
+fi
 
 DST="$HERMES_HOME/plugins/agentmemory"
-mkdir -p "$DST"
-cp -R "$SRC"/. "$DST"/
+mkdir -p "$DST" || { log "ERROR: cannot create $DST"; exit 1; }
+cp -R "$SRC"/. "$DST"/ || { log "ERROR: copying $SRC into $DST failed"; exit 1; }
 # By name, not by number: stage2-hook.sh may have remapped the hermes
 # user via HERMES_UID/HERMES_GID before we get here.
-chown -R hermes:hermes "$HERMES_HOME/plugins"
+chown -R hermes:hermes "$HERMES_HOME/plugins" || {
+    log "ERROR: chown of $HERMES_HOME/plugins to hermes:hermes failed"
+    exit 1
+}
+log "synced plugin into $DST"
