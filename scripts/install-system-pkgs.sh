@@ -5,6 +5,9 @@
 # ca-certs, openssh-client, docker-cli, python3 + uv, node 22 + npm.
 set -euo pipefail
 
+# shellcheck source=scripts/lib/common.sh
+. "${BASH_SOURCE[0]%/*}/lib/common.sh"
+
 PACKAGES=(
     gh
     iproute2
@@ -19,6 +22,4 @@ PACKAGES=(
     yq
 )
 
-apt-get update
-apt-get install -yq --no-install-recommends "${PACKAGES[@]}"
-rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
+apt_install "${PACKAGES[@]}"
