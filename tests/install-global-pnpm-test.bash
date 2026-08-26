@@ -33,8 +33,12 @@ test_installs_pnpm_when_corepack_is_unavailable() {
     new_sandbox
     fake_commands node npm pnpm
     local pnpm_home="$TEST_TMP/pnpm"
+    local system_command
+    for system_command in find ln mkdir rm; do
+        ln -s "$(command -v "$system_command")" "$FAKE_BIN/$system_command"
+    done
 
-    PATH="$FAKE_BIN:/usr/bin:/bin" \
+    PATH="$FAKE_BIN" \
         PNPM_HOME="$pnpm_home" \
         /bin/bash "$REPO_ROOT/scripts/install-global-pnpm.sh"
 

@@ -7,9 +7,15 @@ FAILURE_COUNT=0
 run_test() {
     local name=$1
     local test_function=$2
+    local status
     TEST_COUNT=$((TEST_COUNT + 1))
 
-    if ("$test_function"); then
+    set +e
+    (set -e; "$test_function")
+    status=$?
+    set -e
+
+    if ((status == 0)); then
         printf 'ok %d - %s\n' "$TEST_COUNT" "$name"
     else
         printf 'not ok %d - %s\n' "$TEST_COUNT" "$name"
