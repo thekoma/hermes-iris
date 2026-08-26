@@ -11,7 +11,7 @@
 #   memory.provider: agentmemory   (in $HERMES_HOME/config.yaml)
 set -eu
 
-SRC=/opt/agentmemory-hermes-plugin
+SRC=${AGENTMEMORY_PLUGIN_SOURCE:-/opt/agentmemory-hermes-plugin}
 [ -d "$SRC" ] || exit 0
 [ -n "${HERMES_HOME:-}" ] && [ -d "${HERMES_HOME:-}" ] || exit 0
 
