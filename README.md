@@ -1,4 +1,4 @@
-# hermes-iris
+# hermes-koma
 
 Hermes Agent image with the operational toolbelt that the Asgard cluster
 needs baked in.  Builds on top of upstream `nousresearch/hermes-agent` and
@@ -15,8 +15,8 @@ adds:
 ## Image
 
 ```
-ghcr.io/thekoma/hermes-iris:<YYYY.MM.N>
-ghcr.io/thekoma/hermes-iris:latest
+ghcr.io/thekoma/hermes-koma:<YYYY.MM.N>
+ghcr.io/thekoma/hermes-koma:latest
 ```
 
 ## How tags work
@@ -33,8 +33,8 @@ tags automatically.
 ## Local smoke test
 
 ```sh
-docker buildx build --platform linux/amd64 --load -t hermes-iris:smoke .
-docker run --rm --entrypoint /bin/bash hermes-iris:smoke -c '
+docker buildx build --platform linux/amd64 --load -t hermes-koma:smoke .
+docker run --rm --entrypoint /bin/bash hermes-koma:smoke -c '
   kubectl version --client; helm version --short; argocd version --client --short
   egctl version; vault version; mcp-grafana --help | head -1
   vault-mcp-server --help | head -1; pnpm --version

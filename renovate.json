@@ -36,9 +36,9 @@
       "description": "Pinned ARG NAME=value lines annotated with a renovate comment in the Dockerfile",
       "managerFilePatterns": ["/^Dockerfile$/"],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?\\s+ARG \\w+=(?<currentValue>[\\w.+-]+)"
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?\\s+ARG \\w+=(?<currentValue>[\\w.+-]+)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
       ],
-      "versioningTemplate": "semver"
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}"
     }
   ]
 }
