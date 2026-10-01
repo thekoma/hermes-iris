@@ -4,21 +4,25 @@ Base image: [`nousresearch/hermes-agent`](https://github.com/NousResearch/hermes
 
 ## Version pinning
 
-The Dockerfile's `ARG HERMES_VERSION=` is annotated for Renovate with
-`# renovate: datasource=docker depName=nousresearch/hermes-agent`.  Renovate
-opens a PR on every upstream version bump and (per `renovate.json`)
-auto-merges minor/patch updates.  Major bumps go to manual review.
+The Dockerfile pins `ARG HERMES_VERSION=latest@sha256:<digest>`, annotated for
+Renovate with `# renovate: datasource=docker depName=nousresearch/hermes-agent
+versioning=docker`. When upstream moves `latest`, Renovate opens a digest PR and
+automerges it; the push to `main` triggers the build. No upstream change, no
+build, no new tag.
 
 ## Bumping by hand
 
 ```sh
-sed -i 's/^ARG HERMES_VERSION=.*/ARG HERMES_VERSION=<new>/' Dockerfile
-git commit -am "chore(deps): pin hermes-agent to <new>"
+digest=$(docker buildx imagetools inspect nousresearch/hermes-agent:latest \
+  --format '{{json .Manifest}}' | jq -r .digest)
+sed -i "s|^ARG HERMES_VERSION=.*|ARG HERMES_VERSION=latest@${digest}|" Dockerfile
+git commit -am "chore(deps): pin hermes-agent to latest@${digest}"
 git push
 ```
 
-## Nightly rebuild
+## No nightly rebuild
 
-`.github/workflows/release.yaml` includes `schedule: cron "0 3 * * *"`.
-Even if no ARGs changed, the nightly run rebuilds against the latest
-upstream image digest so security fixes propagate within ~24h.
+There is no scheduled build. A nightly run only re-tagged identical layers
+(GHA cache hits on every step) under a fresh index digest, which opened a
+pointless bump PR downstream every day. Builds run on push to `main`, on tags,
+and on `workflow_dispatch`.

@@ -3,8 +3,10 @@
 
 # Global ARG — must be declared before the first FROM so subsequent FROM
 # directives can substitute it.  See: https://docs.docker.com/reference/dockerfile/#scope
-# renovate: datasource=docker depName=nousresearch/hermes-agent
-ARG HERMES_VERSION=latest
+# Pinned by digest so the image only rebuilds when upstream actually moves:
+# Renovate opens a digest PR when `latest` changes, its merge triggers the build.
+# renovate: datasource=docker depName=nousresearch/hermes-agent versioning=docker
+ARG HERMES_VERSION=latest@sha256:d4da4a40cd7a28aba983775d9fd31d94cbf153eeb0cb9e844d6d0f612b7c24db
 
 # ---------- Stage 1: Go MCP servers ----------
 FROM golang:1.26-alpine AS gobuilder

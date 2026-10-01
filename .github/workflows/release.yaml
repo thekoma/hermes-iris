@@ -9,8 +9,6 @@ on:
       - ".gitignore"
       - "renovate.json"
       - "LICENSE"
-  schedule:
-    - cron: "0 3 * * *"  # nightly rebuild picks up upstream/digest changes
   workflow_dispatch:
 
 concurrency:
@@ -18,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE: ghcr.io/thekoma/hermes-iris
+  IMAGE: ghcr.io/thekoma/hermes-koma
 
 permissions:
   contents: read
@@ -174,7 +172,6 @@ jobs:
           tags: |
             type=raw,value=${{ needs.prepare.outputs.tag }}
             type=raw,value=latest
-            type=schedule,pattern=latest-nightly
 
       - name: Create multi-arch manifest and push
         working-directory: /tmp/digests
